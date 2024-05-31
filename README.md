@@ -10,6 +10,14 @@ An updated version of my previous neural networks:
 
 I trained it on the same images and got similiar results to the feed forward network, yet the training time took much longer, likely due optimizations I didn't implement.
 
+# Features
+ - Adam and RMSProp Optimization
+ - Convolutional Layers
+ - Faster forward and backward propagation
+ - See's images in color
+ - Annealing
+ - Fixed Weight Decay and dropout
+
 # Usage ⚙
 
 You can run `main.py` however you'd like, to change the paramaters go to the bottom of the file and change the paramaters going to `Main`
@@ -31,3 +39,10 @@ You can run `main.py` however you'd like, to change the paramaters go to the bot
  > - How many CPU Threads the program will use for training
 
 To test the model run play.py, you can enter your own image link or have it pick a random image to classify
+
+# Sources 🔌
+
+ - https://builtin.com/machine-learning/adam-optimization
+ - https://optimization.cbe.cornell.edu/index.php?title=Adam
+ - https://www.youtube.com/watch?v=pj9-rr1wDhM
+ - https://www.educative.io/answers/how-to-backpropagate-through-max-pooling-layers
