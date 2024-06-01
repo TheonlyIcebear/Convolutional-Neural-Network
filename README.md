@@ -10,6 +10,9 @@ An updated version of my previous neural networks:
 
 I trained it on the same images and got similiar results to the feed forward network, yet the training time took much longer, likely due optimizations I didn't implement.
 
+![image](https://github.com/TheonlyIcebear/Convolutional-Neural-Network/assets/78031685/165bd4f8-5f95-46d8-901e-ba4cb32f94cb)
+
+
 # Features
  - Adam and RMSProp Optimization
  - Convolutional Layers
@@ -17,6 +20,10 @@ I trained it on the same images and got similiar results to the feed forward net
  - See's images in color
  - Annealing
  - Fixed Weight Decay and dropout
+ - Convolution Visualizer
+
+![image](https://github.com/TheonlyIcebear/Convolutional-Neural-Network/assets/78031685/e9c79f46-e5b7-445d-bf0f-004d5b0245d8)
+
 
 # Usage ⚙
 
