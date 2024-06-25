@@ -322,30 +322,45 @@ class Main:
         width, height = input_dimensions
         inputs = width * height * depth
 
-        print(depth, width, height)
-
         # Generate convolutional layers
 
         input_channels = self.input_channels
-        input_dimensions = (self.image_width, self.image_height)
 
         convolutional_model = [*range(len(convolutional_dimensions))]
-        convolutional_biases = [*range(len(convolutional_dimensions))]
 
-        for idx, (channels, kernel_size, pool_size) in enumerate(tqdm(convolutional_dimensions)):
-            unpooled_dimensions = np.array(input_dimensions) - kernel_size + 1
-            result_dimensions = np.ceil(unpooled_dimensions / pool_size).astype(int)
-
+        for idx, (channels, kernel_size, pool_size) in enumerate(convolutional_dimensions):
             if not self.variance:
-                variance = np.sqrt(2.8 / (input_channels * kernel_size ** 2))
+                variance = 2 / (input_channels + channels)
 
             else:
                 variance = self.variance
 
-            convolutional_model[idx] = np.random.normal(0, variance, (channels, input_channels, kernel_size, kernel_size)).tolist()
-            convolutional_biases[idx] = np.zeros((channels, *unpooled_dimensions)).tolist()
+            print(variance)
+
+            convolutional_model[idx] = np.random.uniform(-variance, variance, (channels, input_channels, kernel_size, kernel_size)).tolist()
             input_channels = channels
-            input_dimensions = result_dimensions
+
+        # Generate biases for convolutional layers
+
+        input_channels = self.input_channels
+
+        convolutional_biases = [*range(len(convolutional_dimensions))]
+
+        input_dimensions = (self.image_width, self.image_height)
+        for idx, (channels, kernel_size, pooling_size) in enumerate(convolutional_dimensions):
+            result_dimensions = np.array(input_dimensions) - kernel_size + 1
+            input_dimensions = np.ceil(result_dimensions / pooling_size).astype(int)
+
+            if not self.variance:
+                variance = 2 / (input_channels + channels)
+
+            else:
+                variance = self.variance
+
+            print(variance)
+
+            convolutional_biases[idx] = np.random.uniform(-variance, variance, (channels, *result_dimensions)).tolist()
+            input_channels = channels
 
         # Generate feed forward layer
 
@@ -359,19 +374,19 @@ class Main:
         heights = np.append([inputs], heights)
         heights[-1] = outputs
 
-        for idx, inputs in enumerate(tqdm(heights[:-1])):
+        for idx, inputs in enumerate(heights[:-1]):
 
             outputs = heights[idx + 1]
 
             if not self.variance:
-                variance = np.sqrt(3 / (inputs))
+                variance = 2 / (inputs + outputs)
+
             else:
                 variance = self.variance
 
-            data = np.random.normal(0, variance, (outputs, inputs + 1))
-            data[:, -1] = 0
+            print(variance)
 
-            model[idx] = data.tolist()
+            model[idx] = np.random.uniform(-variance, variance, (outputs, inputs + 1)).tolist()
 
         return [self.numpify(convolutional_model), self.numpify(model), self.numpify(convolutional_biases), np.array(convolutional_dimensions), np.array(heights), self.hidden_layer_activation_function, self.output_layer_activation_function, self.cost_function]
 
@@ -379,19 +394,19 @@ if __name__ == "__main__":
     
     try:
         Main(
-            tests_amount = 12, # The length of the tests,
+            tests_amount = 24, # The length of the tests,
             generation_limit = 1000000, # The amount of generations the model will be trained through
             training_percent = 0.85, # Percent of data that will be used for training,
             cost_limit = 0.0, # if the cost goes below this number the model will stop training
             
             optimization = "momentum", # momentum, adam, RMSProp, vanilla 
-            momentum_constant = 0.9, # What percent of the previous changes that are added to each weight in our gradient descent
-            adam_constant = 0.99,
+            momentum_constant = 0.99, # What percent of the previous changes that are added to each weight in our gradient descent
+            adam_constant = 0.999,
             learning_rate = 0.0001, # How fast the model learns, if too low the model will train very slow and if too high it won't train
             weight_decay = 0.0,
             dropout_rate = 0.0,
             
-            variance = None, # If none it will use Xavier initialization to optimize
+            variance = 0.15, # If none it will use Xavier initialization to optimize
             annealing_constant = 0.00001,
 
             hidden_layer_activation_function = "relu", # crelu, softmax, sigmoid, tanh, relu
@@ -408,12 +423,12 @@ if __name__ == "__main__":
             ],  # The length and height of the model
 
             convolutional_dimensions=[
-                [8, 3, 2], # how many kernels and the kernel sizes [Kernels, Size, Pooling_Size]
-                [16, 3, 2],
-                [32, 3, 2]
+                [3, 3, 2], # how many kernels and the kernel sizes [Kernels, Size, Pooling_Size]
+                [6, 3, 2],
+                [9, 3, 2]
             ],
 
-            threads = 12,  # How many concurrent threads to be used
+            threads = 24,  # How many concurrent threads to be used
             outputs = 8 # There are eight outputs
         )
     except KeyboardInterrupt:
