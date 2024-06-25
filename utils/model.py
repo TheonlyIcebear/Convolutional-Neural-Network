@@ -1,8 +1,9 @@
 import scipy, skimage, numba, time, numpy as np
-from numba import *
+from utils.functions import Activations, Loss
 from numba.experimental import jitclass
 from functools import partial
 from typing import *
+from numba import *
 
 spec = [
     ('model', double[:, :, :]),
@@ -16,91 +17,18 @@ class Model:
         self.convolutional_model = convolutional_model
         self.convolutional_layers = convolutional_layers
         self.convolutional_biases = convolutional_biases
-        self.hidden_layer_activation_function = getattr(self, "_"+hidden_function)
-        self.output_layer_activation_function = getattr(self, "_"+output_function)
-        self.cost_function = getattr(self, "_"+cost_function)
-    
-    @staticmethod
-    @numba.cfunc("float64[:](float64[:], optional(boolean))")
-    def _sigmoid(x, deriv=False):
-        if deriv:
-            return x * (1 - x)
 
-        return ( 1 / ( 1 + np.exp(-x) ) )
+        self.hidden_layer_activation_function = getattr(Activations, hidden_function)
+        self.output_layer_activation_function = getattr(Activations, output_function)
+        self.convolutional_activation_function = Activations.relu
+        self.cost_function = getattr(Loss, cost_function)
 
-    @staticmethod
-    @numba.cfunc("float64[:](float64[:], optional(boolean))")
-    def _tanh(x, deriv=False):
-        if deriv:
-            return (1 - x ** 2)
+    def numpify(self, input_array, reverse=False):
+        if reverse:
+            return [array.tolist() for array in input_array]
+        return [np.array(array) for array in input_array]
 
-        return np.tanh(x)
-
-    @staticmethod
-    @numba.cfunc("float64[:](float64[:], optional(boolean))")
-    def _relu(x, deriv=False):
-
-        negative_slope = 10 ** -9
-
-        if deriv:
-            return 1 * (x > 0) + (negative_slope * (x < 0))
-
-        return 1 * x * (x > 0) + (negative_slope * x * (x < 0))
-
-    @staticmethod
-    @numba.cfunc("float64[:](float64[:], optional(boolean))")
-    def _crelu(x, deriv=False):
-        if deriv:
-            return (1 * ((x > 0) & (x < 1))).astype(np.float64)
-
-        return x * ((x > 0) & (x < 1)) + (1 * (x >= 1))
-
-    @staticmethod
-    @numba.cfunc("float64[:](float64[:], optional(boolean))")
-    def _softmax(x, deriv=False):
-
-        if deriv:
-            softmax_output = np.exp(x) / np.sum(np.exp(x))
-            return softmax_output * (1 - softmax_output)
-
-        e_x = np.exp(x)
-
-        return e_x / e_x.sum()
-            
-    @staticmethod
-    @numba.cfunc("float64[:](float64[:], float64[:], optional(boolean))")
-    def _cross_entropy(outputs, expected_outputs, deriv=False):
-        if deriv:
-            return (outputs - expected_outputs) / outputs.shape[0]
-
-        epsilon = 1e-12
-
-        outputs = np.clip(outputs, epsilon, 1.0 - epsilon)
-
-        return -(expected_outputs * np.log(outputs + epsilon))
-        
-    @staticmethod
-    @numba.cfunc("float64[:](float64[:], float64[:], optional(boolean))")
-    def _mse(outputs, expected_outputs, deriv=False):
-        if deriv:
-            return 2 * (outputs - expected_outputs)
-            
-        return (outputs - expected_outputs) ** 2
-
-    @staticmethod
-    @numba.cfunc("float64[:](float64[:], float64[:], optional(boolean))")
-    def _smooth_l1_loss(outputs, expected_outputs, deriv=False):
-        delta = 1.0
-
-        if deriv:
-            diff = outputs - expected_outputs
-            mask = np.abs(diff) <= delta
-            return np.where(mask, diff, np.sign(diff) * delta) / outputs.shape[0]
-        else:
-            diff = outputs - expected_outputs
-            return np.where(np.abs(diff) <= delta, 0.5 * diff ** 2, delta * (np.abs(diff) - 0.5 * delta)) / outputs.shape[0]
-
-    # @jit(forceobj=True, cache=False)
+    # @jit(forceobj=True, cache=True)
     def gradient(self, activations, expected_output, weight_decay = 0):
         gradient = [np.zeros(layer.shape) for layer in self.model]
         convolutional_gradient = [np.zeros(layer.shape) for layer in self.convolutional_model]
@@ -184,7 +112,7 @@ class Model:
                 gradient[index][:height, num_inputs] = bias_derivative - b_decay
 
             else: # Convolutional layers
-                depth, scale, pooling_scale = self.convolutional_layers[count - dense_layers_count]
+                depth, scale, pooling_scale = self.convolutional_layers[::-1][count - dense_layers_count]
 
                 num_inputs = scale ** 2
 
@@ -205,6 +133,8 @@ class Model:
 
                 node_values = np.zeros(input_activations.shape)
 
+                old_node_values = old_node_values * self.convolutional_activation_function(old_node_values, deriv=True)
+
                 # TODO: Add numpy only option
 
                 unpooled_width, unpooled_height = input_dimensions
@@ -214,24 +144,29 @@ class Model:
                 for i, kernels in enumerate(layer):
                     kernels = kernels[:depth]
                     for j, (image, kernel, indices) in enumerate(zip(input_activations, kernels, pooling_indices)):
-
+                        
                         unpooled_array = np.zeros((unpooled_width, unpooled_height))
-                        for k, pos in enumerate(indices):
 
-                            x = k % iterations_width
-                            y = k // iterations_width
+                        if pooling_scale > 1:
+                            for k, pos in enumerate(indices):
 
-                            padded_array = unpooled_array[
-                                x * pooling_scale: (x + 1) * pooling_scale, 
-                                y * pooling_scale: (y + 1) * pooling_scale
-                            ]
+                                x = k % iterations_width
+                                y = k // iterations_width
 
-                            padded_array[pos[0] % padded_array.shape[0], pos[1] % padded_array.shape[1]] = old_node_values[i][x, y]
+                                padded_array = unpooled_array[
+                                    x * pooling_scale: (x + 1) * pooling_scale, 
+                                    y * pooling_scale: (y + 1) * pooling_scale
+                                ]
 
-                            unpooled_array[
-                                x * pooling_scale: (x + 1) * pooling_scale, 
-                                y * pooling_scale: (y + 1) * pooling_scale
-                            ] = padded_array
+                                padded_array[pos[0] % padded_array.shape[0], pos[1] % padded_array.shape[1]] = old_node_values[i][x, y]
+
+                                unpooled_array[
+                                    x * pooling_scale: (x + 1) * pooling_scale, 
+                                    y * pooling_scale: (y + 1) * pooling_scale
+                                ] = padded_array
+
+                        else:
+                            unpooled_array = old_node_values[i]
 
                         kernel_decay = 2 * weight_decay * convolutional_gradient[index][i, j]
 
@@ -246,7 +181,7 @@ class Model:
 
         return gradient, convolutional_gradient, convolutional_biases_gradient, average_cost
 
-    # @jit(forceobj=True, cache=False)
+    # @jit(forceobj=True, cache=True)
     def eval(self, input, dropout_rate = 0, training=True, numpy_only=False):
         model = self.model
         heights = self.heights
@@ -296,47 +231,47 @@ class Model:
                     for kernel, channel in zip(kernels, input_channels):
                         output[i] += scipy.signal.convolve2d(channel, kernel, "valid")
 
+            output = self.convolutional_activation_function(output)
+
             # Pooling
 
             result_dimensions = np.ceil(np.array(output.shape[1:]) / pooling_shape).astype(int)
             result_width, result_height = result_dimensions
 
-            if training:
+            if training and pooling_scale > 1:
                 output_width, output_height = output.shape[1:]
-                # output = np.pad(output, [(0, 0), (0, output_width % pooling_scale), (0, output_height % pooling_scale)])
+                padded_output = np.pad(output, [(0, 0), (0, output_width % pooling_scale), (0, output_height % pooling_scale)])
 
-                pooling_samples = np.lib.stride_tricks.as_strided(
-                    output,
-                    shape=(height, result_width, result_height, *pooling_shape),
-                    strides=(
-                        output.strides[0],
-                        output.strides[1] * pooling_shape[0],
-                        output.strides[2] * pooling_shape[1],
-                        *output.strides[1:]
-                    )
-                )
+                pooling_windows = np.zeros((height, result_width * result_height, *pooling_shape))
 
-                pooling_windows = pooling_samples.reshape(height, result_width * result_height, *pooling_shape)
+                for i, channel in enumerate(padded_output):
+                    pooling_windows[i] = skimage.util.view_as_blocks(channel, pooling_shape).reshape(result_width * result_height, *pooling_shape)
             
             if numpy_only:
                 pooled_output = np.max(pooling_windows, axis=(2, 3)).reshape(height, *result_dimensions)
 
-            else:
+            elif pooling_scale > 1:
                 pooled_output = skimage.measure.block_reduce(output, (1, pooling_scale, pooling_scale), np.max)
-                
+
+            else:
+                pooled_output = output
+            
             if training:
                 pooling_indices = np.zeros((height, pooling_windows.shape[1], 2)).astype(int)
 
-                for i, channel in enumerate(pooling_windows):
-                    for j, window in enumerate(channel):
-                        index = np.unravel_index(np.argmax(window, axis=None), window.shape)
-                        pooling_indices[i, j] = index
+                if pooling_scale > 1:
+                    for i, channel in enumerate(pooling_windows):
+                        for j, window in enumerate(channel):
+                            index = np.unravel_index(np.argmax(window, axis=None), window.shape)
+                            pooling_indices[i, j] = index
 
                 layer_outputs[idx + 1] = [pooled_output, pooling_indices, output.shape[1:]]
 
             input_channels = np.array(pooled_output)
 
             old_height = height
+
+        # Feed Forward
 
         input_activations = input_channels.flatten()
 
@@ -363,7 +298,7 @@ class Model:
 
             input_activations = output_activations
 
-            if training or idx + 1 == length:
+            if training:
                 layer_outputs[idx + convolutional_layers_count + 1] = output_activations
 
         return layer_outputs
