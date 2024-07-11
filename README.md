@@ -8,7 +8,7 @@ An updated version of my previous neural networks:
 
 [Image Classifier Neural Network](https://github.com/TheonlyIcebear/Image-Recognition-AI)
 
-I trained it on the same images and got similiar results to the feed forward network, ~yet the training time took much longer, likely due optimizations I didn't implement~ (I fixed).
+I trained it on the same images and got similiar results to the feed forward network, ~yet the training time took much longer, likely due optimizations I didn't implement~ (I fixed it).
 
 ![image](https://github.com/TheonlyIcebear/Convolutional-Neural-Network/assets/78031685/16b79a5d-c378-45a1-afcc-258bc31546da)
 
