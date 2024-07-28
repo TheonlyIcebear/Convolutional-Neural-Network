@@ -52,3 +52,4 @@ To test the model run play.py, you can enter your own image link or have it pick
  - https://optimization.cbe.cornell.edu/index.php?title=Adam
  - https://www.youtube.com/watch?v=pj9-rr1wDhM
  - https://www.educative.io/answers/how-to-backpropagate-through-max-pooling-layers
+ - https://www.youtube.com/watch?v=Lakz2MoHy6o&t=337s
